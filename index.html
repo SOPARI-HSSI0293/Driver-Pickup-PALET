@@ -381,7 +381,8 @@
             const tgl = now.toISOString().split('T')[0];
             const jam = now.toLocaleTimeString('id-ID');
             
-            const idPickup = `${currentUser.username}${tgl}${jam}`.replace(/[\s:-]/g, '');
+            // MODIFIKASI: Format ID Pickup = username/Tanggal/Jam
+            const idPickup = `${currentUser.username}/${tgl}/${jam}`;
 
             const transactionsToSend = [];
 
