@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver Pickup - Simple Mode</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTML5-QRCode Library -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    
+    <style>
+        /* TEMA GELAP - Driver (Nuansa Biru Gelap) */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* Slate 950 */
+            color: #ffffff;
+            overflow-x: hidden;
+        }
+
+        /* LOGIN */
+        .login-view {
+            display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem;
+        }
+        .login-card {
+            background-color: #1e293b; border-top: 4px solid #3b82f6;
+        }
+
+        /* SCANNER */
+        #reader {
+            width: 100%; border-radius: 1rem; overflow: hidden; background-color: #000; 
+            max-height: 300px; object-fit: cover; border: 2px solid #334155;
+        }
+        #reader video { object-fit: cover; border-radius: 1rem; }
+
+        .card-dark {
+            background-color: #1e293b; /* Slate 800 */
+            border: 1px solid #334155;
+        }
+        
+        .scan-success-anim { animation: flashBlue 0.3s ease-out; }
+        @keyframes flashBlue {
+            0% { background-color: #3b82f6; }
+            100% { background-color: #1e293b; }
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 2px; }
+        .hidden { display: none !important; }
+
+        /* BIG NUMBER STYLE */
+        .big-number {
+            font-size: 8rem; /* Sangat Besar */
+            line-height: 1;
+            font-weight: 900;
+            text-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 1. TAMPILAN LOGIN -->
+    <div id="login-view" class="login-view">
+        <div class="login-card w-full max-w-sm p-8 rounded-2xl shadow-2xl">
+            <div class="flex flex-col items-center justify-center mb-8">
+                <div class="h-16 w-16 bg-blue-600 rounded-full flex items-center justify-center mb-4 shadow-lg shadow-blue-900/50">
+                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                </div>
+                <h1 class="text-3xl font-bold text-white tracking-tight">DRIVER APP</h1>
+                <p class="text-slate-400 text-sm">Masuk untuk memulai pickup</p>
+            </div>
+            <form id="login-form" onsubmit="handleLogin(event)">
+                <div class="mb-4">
+                    <input type="text" id="loginUsername" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition" placeholder="Username Driver" required>
+                </div>
+                <div class="mb-6">
+                    <input type="password" id="loginPassword" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition" placeholder="Password" required>
+                </div>
+                <div id="login-error-message" class="hidden p-3 rounded-lg text-sm mb-4 font-medium bg-red-900/50 text-red-200 border border-red-900" role="alert"></div>
+                <button type="submit" id="login-submit-btn" class="w-full bg-blue-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-blue-500 transition shadow-lg shadow-blue-900/30 text-lg">MASUK</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 2. TAMPILAN UTAMA (SCANNER) -->
+    <div id="scanner-view" class="min-h-screen flex flex-col hidden relative">
+        
+        <!-- Header -->
+        <div class="px-6 py-4 flex justify-between items-center bg-slate-900 border-b border-slate-800">
+            <div>
+                <h2 class="text-xl font-bold text-white">Pickup Palet</h2>
+                <div class="flex items-center gap-2">
+                    <span id="user-display" class="text-sm text-blue-400 font-semibold">Driver</span>
+                    <span id="data-status" class="text-[10px] text-yellow-500">• Loading Data...</span>
+                </div>
+            </div>
+            <button onclick="handleLogout()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-700 transition">
+                Logout
+            </button>
+        </div>
+
+        <div class="flex-1 flex flex-col p-4 gap-4 max-w-md mx-auto w-full">
+            
+            <!-- Area Kamera -->
+            <div class="relative group rounded-2xl overflow-hidden shadow-2xl shadow-black/50">
+                <div id="reader"></div>
+                <div id="camera-placeholder" class="bg-slate-900 h-64 flex flex-col items-center justify-center border-2 border-dashed border-slate-700 rounded-2xl">
+                    <svg class="w-12 h-12 text-slate-600 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    <p class="text-slate-500 text-sm font-medium">Kamera Mati</p>
+                </div>
+                
+                <div class="absolute bottom-4 left-0 right-0 flex justify-center z-10" id="btn-camera-container">
+                    <button id="toggle-camera-btn" onclick="toggleCamera()" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-full shadow-lg shadow-blue-900/50 text-sm font-bold flex items-center transition transform active:scale-95 border border-blue-400 ring-2 ring-blue-500/30">
+                        MULAI SCAN
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tampilan Jumlah Besar -->
+            <div class="card-dark rounded-2xl p-6 flex flex-col items-center justify-center shadow-xl flex-1 relative overflow-hidden" id="scan-results-card">
+                <div class="absolute top-4 left-4 text-slate-400 text-xs font-bold tracking-widest uppercase">Total Palet</div>
+                
+                <div class="text-center my-4">
+                    <span id="scan-count" class="big-number text-blue-500 transition-all">0</span>
+                </div>
+
+                <div class="w-full border-t border-slate-700 pt-3">
+                    <div id="last-scanned-info" class="text-center text-sm text-slate-300 h-5 truncate font-mono"></div>
+                    
+                    <div class="flex justify-center mt-3">
+                        <button onclick="clearScannedData()" class="text-xs text-red-400 hover:text-red-300 bg-red-900/20 px-4 py-2 rounded-full border border-red-900/30 transition">
+                            Reset Counter
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tombol Simpan -->
+            <button id="btn-simpan" onclick="submitData()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-emerald-900/50 transition transform active:scale-95 disabled:opacity-50 disabled:grayscale text-lg mt-auto">
+                KIRIM DATA PICKUP
+            </button>
+
+            <!-- Status Message -->
+            <div id="status-msg" class="text-center text-xs font-medium hidden pb-4"></div>
+        </div>
+    </div>
+
+    <!-- Audio Beep -->
+    <audio id="scan-beep" src="https://assets.mixkit.co/sfx/preview/mixkit-software-interface-start-2574.mp3"></audio>
+
+    <script>
+        const GOOGLE_SHEET_ID = '1YiIDIa0Ysi-O0k4askOtd8Qf66KnQuJxlLMngDlqM1A'; 
+        const MASTER_SHEET_NAME = 'MASTER PALET'; 
+        const USERCONTROL_SHEET_NAME = 'Usercontrol';
+        const DRIVER_SHEET_NAME = 'Data pickup palet driver'; 
+        const MOCK_API_DEPLOY_URL = 'https://script.google.com/macros/s/AKfycbwiq9RP1jZykmw8a4W1PNgoUgfekOxCkAiHhnLtzFX8YB1I8TTPnzgkhNYQZH6I-MZJ/exec'; 
+        
+        const MASTER_PALLET_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${MASTER_SHEET_NAME}&range=A:H`;
+        const USERCONTROL_URL = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/gviz/tq?tqx=out:json&sheet=${USERCONTROL_SHEET_NAME}&range=A:C`;
+
+        let scannedData = [];
+        let masterData = [];
+        let html5QrcodeScanner = null;
+        let isScanning = false;
+        let currentUser = null;
+
+        // Fetch Helper
+        async function fetchSheetData(url) {
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Network error");
+                const text = await response.text();
+                return JSON.parse(text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1));
+            } catch (error) { console.error(error); throw error; }
+        }
+
+        // --- LOGIN LOGIC ---
+        window.handleLogin = async function(event) {
+            event.preventDefault();
+            const u = document.getElementById('loginUsername').value.trim();
+            const p = document.getElementById('loginPassword').value.trim();
+            const err = document.getElementById('login-error-message');
+            const btn = document.getElementById('login-submit-btn');
+
+            if (!u || !p) return;
+            btn.disabled = true; btn.textContent = "Loading...";
+            
+            try {
+                const json = await fetchSheetData(USERCONTROL_URL);
+                const rows = json.table.rows;
+                let found = null;
+                for (let r of rows) {
+                    const dbUser = r.c[0]?.v || '';
+                    const dbPass = r.c[1]?.v || '';
+                    if (String(dbUser).toLowerCase() === u.toLowerCase() && String(dbPass) === p) {
+                        found = { username: dbUser, role: r.c[2]?.v || 'Driver' };
+                        break;
+                    }
+                }
+
+                if (found) {
+                    currentUser = found;
+                    sessionStorage.setItem('driverAppUserSimple', JSON.stringify(currentUser));
+                    switchView('scanner');
+                } else {
+                    err.textContent = "Username/Password Salah";
+                    err.classList.remove('hidden');
+                }
+            } catch (e) {
+                err.textContent = "Gagal koneksi server";
+                err.classList.remove('hidden');
+            } finally {
+                btn.disabled = false; btn.textContent = "MASUK";
+            }
+        };
+
+        window.handleLogout = function() {
+            sessionStorage.removeItem('driverAppUserSimple');
+            currentUser = null;
+            if (isScanning && html5QrcodeScanner) html5QrcodeScanner.stop().then(() => { html5QrcodeScanner.clear(); isScanning=false; });
+            switchView('login');
+        };
+
+        function checkSession() {
+            const stored = sessionStorage.getItem('driverAppUserSimple');
+            if (stored) { currentUser = JSON.parse(stored); switchView('scanner'); } 
+            else { switchView('login'); }
+        }
+
+        function switchView(viewName) {
+            document.getElementById('login-view').classList.toggle('hidden', viewName === 'scanner');
+            document.getElementById('scanner-view').classList.toggle('hidden', viewName !== 'scanner');
+            if (viewName === 'scanner') {
+                document.getElementById('user-display').textContent = currentUser.username;
+                if (masterData.length === 0) fetchMasterData();
+            }
+        }
+
+        async function fetchMasterData() {
+            try {
+                const json = await fetchSheetData(MASTER_PALLET_URL);
+                const cols = json.table.cols.map(c => (c.label || c.id).toUpperCase().trim());
+                masterData = json.table.rows.map(r => {
+                    let obj = {}; cols.forEach((c, i) => obj[c] = r.c[i]?.v || ''); return obj;
+                });
+                document.getElementById('data-status').textContent = "• Data Ready";
+                document.getElementById('data-status').className = "text-[10px] text-green-500 font-bold";
+            } catch (e) { 
+                document.getElementById('data-status').textContent = "• Offline/Error";
+                document.getElementById('data-status').className = "text-[10px] text-red-500";
+            }
+        }
+
+        // --- SCANNER ---
+        window.toggleCamera = function() {
+            const btn = document.getElementById('toggle-camera-btn');
+            const placeholder = document.getElementById('camera-placeholder');
+            
+            if (isScanning) {
+                html5QrcodeScanner.stop().then(() => {
+                    html5QrcodeScanner.clear(); isScanning = false;
+                    btn.innerHTML = "MULAI SCAN";
+                    btn.className = "bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-full shadow-lg text-sm font-bold border border-blue-400";
+                    placeholder.style.display = 'flex';
+                });
+            } else {
+                placeholder.style.display = 'none';
+                btn.innerHTML = "STOP SCAN";
+                btn.className = "bg-red-600 hover:bg-red-500 text-white px-6 py-2.5 rounded-full shadow-lg text-sm font-bold border border-red-400";
+                
+                html5QrcodeScanner = new Html5Qrcode("reader");
+                html5QrcodeScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 200, height: 200 } }, 
+                (decodedText) => {
+                    const id = decodedText.trim().toUpperCase();
+                    if (scannedData.some(item => item.id === id)) return;
+                    
+                    let found = masterData.find(m => String(m['ID PALET']).trim().toUpperCase() === id);
+                    const itemData = { id: id, name: found ? found['NAMA PALET'] : 'Unknown', size: found ? found['SIZE'] : '-' };
+                    
+                    scannedData.push(itemData);
+                    document.getElementById('scan-beep').play().catch(()=>{});
+                    updateUI(itemData);
+                }, () => {});
+                isScanning = true;
+            }
+        };
+
+        function updateUI(lastItem) {
+            document.getElementById('scan-count').innerText = scannedData.length;
+            document.getElementById('last-scanned-info').textContent = `${lastItem.id} - ${lastItem.name}`;
+            
+            // Animasi Flash
+            const card = document.getElementById('scan-results-card');
+            card.classList.remove('scan-success-anim');
+            void card.offsetWidth; 
+            card.classList.add('scan-success-anim');
+        }
+
+        window.clearScannedData = function() {
+            if(confirm("Hapus semua hasil scan?")) {
+                scannedData = [];
+                document.getElementById('scan-count').innerText = "0";
+                document.getElementById('last-scanned-info').textContent = "";
+            }
+        }
+
+        // --- SUBMIT DATA KHUSUS DRIVER (MODIFIKASI) ---
+        window.submitData = async function() {
+            const btn = document.getElementById('btn-simpan');
+            const statusEl = document.getElementById('status-msg');
+
+            if (scannedData.length === 0) { alert("Belum ada data yang discan!"); return; }
+
+            btn.disabled = true;
+            btn.innerHTML = "MENGIRIM...";
+            statusEl.classList.remove('hidden', 'text-green-500', 'text-red-500');
+            statusEl.classList.add('text-slate-400');
+            statusEl.textContent = "Sedang memproses...";
+
+            // Grouping
+            const groups = {};
+            scannedData.forEach(item => {
+                const key = `${item.name}|${item.size}`;
+                if (!groups[key]) groups[key] = [];
+                groups[key].push(item.id);
+            });
+
+            const now = new Date();
+            const timestamp = now.toLocaleString('id-ID'); // String waktu lokal
+            const tgl = now.toISOString().split('T')[0];
+            const jam = now.toLocaleTimeString('id-ID');
+            
+            // FORMAT ID PICKUP: username+Tanggal+Jam
+            // Menghapus spasi agar menjadi satu string ID yang solid
+            const idPickup = `${currentUser.username}${tgl}${jam}`.replace(/[\s:-]/g, '');
+
+            const transactionsToSend = [];
+
+            for (const [key, ids] of Object.entries(groups)) {
+                const [nama, size] = key.split('|');
+                
+                transactionsToSend.push({
+                    // FIELD YANG DIMINTA
+                    'ID Pickup': idPickup,
+                    'Status pickup': 'Open',
+                    
+                    // FIELD STANDAR
+                    'Nama Palet': nama,
+                    'Size': size,
+                    'Tanggal Transaksi': tgl,
+                    'Jam Transaksi': jam,
+                    'ID Palet': ids.join(','),
+                    'Jumlah Palet': ids.length,
+                    
+                    // HILANGKAN: Keterangan, Status, Lokasi, Driver
+                    'Jenis Transaksi': 'Pickup palet', // Selalu ini
+                    'username': currentUser.username,
+                    'Submitted By': currentUser.username 
+                });
+            }
+
+            const payload = {
+                sheetName: DRIVER_SHEET_NAME,
+                transactions: transactionsToSend,
+                submittedBy: currentUser.username,
+                timestamp: timestamp
+            };
+
+            try {
+                await fetch(MOCK_API_DEPLOY_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+
+                // Fake delay
+                await new Promise(r => setTimeout(r, 1500));
+
+                statusEl.className = "text-center text-xs font-bold text-green-500 pb-4";
+                statusEl.textContent = "✅ SUKSES! Data Terkirim.";
+                
+                scannedData = [];
+                document.getElementById('scan-count').innerText = "0";
+                document.getElementById('last-scanned-info').textContent = "";
+
+            } catch (error) {
+                statusEl.className = "text-center text-xs font-bold text-red-500 pb-4";
+                statusEl.textContent = "❌ Gagal kirim. Cek internet.";
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "KIRIM DATA PICKUP";
+            }
+        };
+
+        window.alert = function(msg) {
+            const el = document.getElementById('status-msg');
+            el.textContent = msg; el.classList.remove('hidden'); el.classList.add('text-red-500');
+            setTimeout(()=>el.classList.add('hidden'), 3000);
+        }
+
+        window.onload = checkSession;
+    </script>
+</body>
+</html>
