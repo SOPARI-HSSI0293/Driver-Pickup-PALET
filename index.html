@@ -29,7 +29,9 @@
         /* SCANNER */
         #reader {
             width: 100%; border-radius: 1rem; overflow: hidden; background-color: #000; 
-            max-height: 300px; object-fit: cover; border: 2px solid #334155;
+            /* MODIFIKASI: Menyesuaikan tinggi agar lebih proporsional untuk scan area besar */
+            min-height: 300px; 
+            object-fit: cover; border: 2px solid #334155;
         }
         #reader video { object-fit: cover; border-radius: 1rem; }
 
@@ -269,9 +271,26 @@
                 btn.className = "bg-red-600 hover:bg-red-500 text-white px-6 py-2.5 rounded-full shadow-lg text-sm font-bold border border-red-400";
                 
                 html5QrcodeScanner = new Html5Qrcode("reader");
-                html5QrcodeScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 200, height: 200 } }, 
+                
+                // MODIFIKASI 1: Area Scan Lebih Besar & Proporsional
+                const config = { 
+                    fps: 10, 
+                    // Menggunakan fungsi untuk menentukan ukuran box secara dinamis
+                    // Mengambil 75% dari sisi terkecil layar kamera agar pas dan besar
+                    qrbox: function(viewfinderWidth, viewfinderHeight) {
+                        var minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                        return {
+                            width: Math.floor(minEdge * 0.75),
+                            height: Math.floor(minEdge * 0.75)
+                        };
+                    },
+                    aspectRatio: 1.0 
+                };
+
+                html5QrcodeScanner.start({ facingMode: "environment" }, config, 
                 (decodedText) => {
                     const id = decodedText.trim().toUpperCase();
+                    // Cegah duplikat scan untuk sesi ini
                     if (scannedData.some(item => item.id === id)) return;
                     
                     let found = masterData.find(m => String(m['ID PALET']).trim().toUpperCase() === id);
@@ -317,14 +336,6 @@
             statusEl.classList.add('text-slate-400');
             statusEl.textContent = "Sedang memproses...";
 
-            // Grouping
-            const groups = {};
-            scannedData.forEach(item => {
-                const key = `${item.name}|${item.size}`;
-                if (!groups[key]) groups[key] = [];
-                groups[key].push(item.id);
-            });
-
             const now = new Date();
             const timestamp = now.toLocaleString('id-ID'); // String waktu lokal
             const tgl = now.toISOString().split('T')[0];
@@ -336,28 +347,28 @@
 
             const transactionsToSend = [];
 
-            for (const [key, ids] of Object.entries(groups)) {
-                const [nama, size] = key.split('|');
-                
+            // MODIFIKASI 2: Tidak ada grouping (penggabungan ID).
+            // Setiap item yang discan menjadi 1 baris transaksi terpisah.
+            scannedData.forEach(item => {
                 transactionsToSend.push({
                     // FIELD YANG DIMINTA
                     'ID Pickup': idPickup,
                     'Status pickup': 'Open',
                     
                     // FIELD STANDAR
-                    'Nama Palet': nama,
-                    'Size': size,
+                    'Nama Palet': item.name,
+                    'Size': item.size,
                     'Tanggal Transaksi': tgl,
                     'Jam Transaksi': jam,
-                    'ID Palet': ids.join(','),
-                    'Jumlah Palet': ids.length,
+                    'ID Palet': item.id, // Satu ID per baris
+                    'Jumlah Palet': 1,   // Jumlah selalu 1 per baris
                     
-                    // HILANGKAN: Keterangan, Status, Lokasi, Driver
-                    'Jenis Transaksi': 'Pickup palet', // Selalu ini
+                    // Lain-lain
+                    'Jenis Transaksi': 'Pickup palet', 
                     'username': currentUser.username,
                     'Submitted By': currentUser.username 
                 });
-            }
+            });
 
             const payload = {
                 sheetName: DRIVER_SHEET_NAME,
@@ -374,7 +385,7 @@
                     body: JSON.stringify(payload),
                 });
 
-                // Fake delay
+                // Fake delay untuk UI
                 await new Promise(r => setTimeout(r, 1500));
 
                 statusEl.className = "text-center text-xs font-bold text-green-500 pb-4";
