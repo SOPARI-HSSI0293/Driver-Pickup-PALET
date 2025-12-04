@@ -61,7 +61,7 @@
 </head>
 <body>
 
-    <!-- 1. TAMPILAN LOGIN -->
+    <!-- 1. TAMPILAN LOGIN (MODIFIKASI: Hapus Password) -->
     <div id="login-view" class="login-view">
         <div class="login-card w-full max-w-sm p-8 rounded-2xl shadow-2xl">
             <div class="flex flex-col items-center justify-center mb-8">
@@ -72,12 +72,12 @@
                 <p class="text-slate-400 text-sm">Masuk untuk memulai pickup</p>
             </div>
             <form id="login-form" onsubmit="handleLogin(event)">
-                <div class="mb-4">
-                    <input type="text" id="loginUsername" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition" placeholder="Username Driver" required>
-                </div>
                 <div class="mb-6">
-                    <input type="password" id="loginPassword" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition" placeholder="Password" required>
+                    <label class="block text-slate-400 text-xs font-bold mb-2 uppercase tracking-wider">Username Driver</label>
+                    <input type="text" id="loginUsername" class="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition" placeholder="Ketik nama Anda..." required>
                 </div>
+                <!-- Password Field DIHAPUS sesuai permintaan -->
+                
                 <div id="login-error-message" class="hidden p-3 rounded-lg text-sm mb-4 font-medium bg-red-900/50 text-red-200 border border-red-900" role="alert"></div>
                 <button type="submit" id="login-submit-btn" class="w-full bg-blue-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-blue-500 transition shadow-lg shadow-blue-900/30 text-lg">MASUK</button>
             </form>
@@ -112,6 +112,7 @@
                 </div>
                 
                 <div class="absolute bottom-4 left-0 right-0 flex justify-center z-10" id="btn-camera-container">
+                    <!-- Tombol ini sekarang hanya untuk manual toggle jika auto-start gagal -->
                     <button id="toggle-camera-btn" onclick="toggleCamera()" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-full shadow-lg shadow-blue-900/50 text-sm font-bold flex items-center transition transform active:scale-95 border border-blue-400 ring-2 ring-blue-500/30">
                         MULAI SCAN
                     </button>
@@ -176,15 +177,14 @@
             } catch (error) { console.error(error); throw error; }
         }
 
-        // --- LOGIN LOGIC ---
+        // --- LOGIN LOGIC (MODIFIKASI: Hapus Cek Password) ---
         window.handleLogin = async function(event) {
             event.preventDefault();
             const u = document.getElementById('loginUsername').value.trim();
-            const p = document.getElementById('loginPassword').value.trim();
             const err = document.getElementById('login-error-message');
             const btn = document.getElementById('login-submit-btn');
 
-            if (!u || !p) return;
+            if (!u) return;
             btn.disabled = true; btn.textContent = "Loading...";
             
             try {
@@ -193,8 +193,8 @@
                 let found = null;
                 for (let r of rows) {
                     const dbUser = r.c[0]?.v || '';
-                    const dbPass = r.c[1]?.v || '';
-                    if (String(dbUser).toLowerCase() === u.toLowerCase() && String(dbPass) === p) {
+                    // const dbPass = r.c[1]?.v || ''; // Password diabaikan
+                    if (String(dbUser).toLowerCase() === u.toLowerCase()) {
                         found = { username: dbUser, role: r.c[2]?.v || 'Driver' };
                         break;
                     }
@@ -205,7 +205,7 @@
                     sessionStorage.setItem('driverAppUserSimple', JSON.stringify(currentUser));
                     switchView('scanner');
                 } else {
-                    err.textContent = "Username/Password Salah";
+                    err.textContent = "Username Tidak Ditemukan";
                     err.classList.remove('hidden');
                 }
             } catch (e) {
@@ -219,7 +219,7 @@
         window.handleLogout = function() {
             sessionStorage.removeItem('driverAppUserSimple');
             currentUser = null;
-            if (isScanning && html5QrcodeScanner) html5QrcodeScanner.stop().then(() => { html5QrcodeScanner.clear(); isScanning=false; });
+            stopScanner(); // Pastikan scanner mati saat logout
             switchView('login');
         };
 
@@ -232,9 +232,15 @@
         function switchView(viewName) {
             document.getElementById('login-view').classList.toggle('hidden', viewName === 'scanner');
             document.getElementById('scanner-view').classList.toggle('hidden', viewName !== 'scanner');
+            
             if (viewName === 'scanner') {
                 document.getElementById('user-display').textContent = currentUser.username;
                 if (masterData.length === 0) fetchMasterData();
+                
+                // MODIFIKASI: Auto-start kamera dengan delay kecil agar elemen HTML siap
+                setTimeout(() => {
+                    startScanner();
+                }, 500);
             }
         }
 
@@ -253,54 +259,89 @@
             }
         }
 
-        // --- SCANNER ---
-        window.toggleCamera = function() {
+        // --- SCANNER LOGIC ---
+        
+        // Fungsi terpisah untuk memulai scanner
+        function startScanner() {
+            if (isScanning) return; // Jangan start jika sudah jalan
+
+            const btn = document.getElementById('toggle-camera-btn');
+            const placeholder = document.getElementById('camera-placeholder');
+
+            // Setup UI terlebih dahulu
+            placeholder.style.display = 'none';
+            btn.innerHTML = "STOP SCAN";
+            btn.className = "bg-red-600 hover:bg-red-500 text-white px-6 py-2.5 rounded-full shadow-lg text-sm font-bold border border-red-400";
+
+            if (!html5QrcodeScanner) {
+                html5QrcodeScanner = new Html5Qrcode("reader");
+            }
+
+            const config = { 
+                fps: 10, 
+                qrbox: function(viewfinderWidth, viewfinderHeight) {
+                    var minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                    return {
+                        width: Math.floor(minEdge * 0.75),
+                        height: Math.floor(minEdge * 0.75)
+                    };
+                },
+                aspectRatio: 1.0 
+            };
+
+            html5QrcodeScanner.start({ facingMode: "environment" }, config, 
+            (decodedText) => {
+                const id = decodedText.trim().toUpperCase();
+                if (scannedData.some(item => item.id === id)) return;
+                
+                let found = masterData.find(m => String(m['ID PALET']).trim().toUpperCase() === id);
+                const itemData = { id: id, name: found ? found['NAMA PALET'] : 'Unknown', size: found ? found['SIZE'] : '-' };
+                
+                scannedData.push(itemData);
+                document.getElementById('scan-beep').play().catch(()=>{});
+                updateUI(itemData);
+            }, 
+            (errorMessage) => {
+                // Ignore parse errors
+            })
+            .then(() => {
+                isScanning = true;
+            })
+            .catch((err) => {
+                console.error("Gagal start kamera otomatis", err);
+                // Jika gagal (misal izin ditolak), kembalikan UI ke tombol Mulai
+                stopScannerUIOnly();
+                alert("Gagal membuka kamera. Pastikan izin diberikan.");
+            });
+        }
+
+        // Fungsi terpisah untuk stop scanner
+        function stopScanner() {
+            if (!isScanning || !html5QrcodeScanner) return;
+            
+            html5QrcodeScanner.stop().then(() => {
+                html5QrcodeScanner.clear();
+                isScanning = false;
+                stopScannerUIOnly();
+            }).catch(err => console.log("Stop failed", err));
+        }
+
+        function stopScannerUIOnly() {
             const btn = document.getElementById('toggle-camera-btn');
             const placeholder = document.getElementById('camera-placeholder');
             
-            if (isScanning) {
-                html5QrcodeScanner.stop().then(() => {
-                    html5QrcodeScanner.clear(); isScanning = false;
-                    btn.innerHTML = "MULAI SCAN";
-                    btn.className = "bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-full shadow-lg text-sm font-bold border border-blue-400";
-                    placeholder.style.display = 'flex';
-                });
-            } else {
-                placeholder.style.display = 'none';
-                btn.innerHTML = "STOP SCAN";
-                btn.className = "bg-red-600 hover:bg-red-500 text-white px-6 py-2.5 rounded-full shadow-lg text-sm font-bold border border-red-400";
-                
-                html5QrcodeScanner = new Html5Qrcode("reader");
-                
-                // MODIFIKASI 1: Area Scan Lebih Besar & Proporsional
-                const config = { 
-                    fps: 10, 
-                    // Menggunakan fungsi untuk menentukan ukuran box secara dinamis
-                    // Mengambil 75% dari sisi terkecil layar kamera agar pas dan besar
-                    qrbox: function(viewfinderWidth, viewfinderHeight) {
-                        var minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-                        return {
-                            width: Math.floor(minEdge * 0.75),
-                            height: Math.floor(minEdge * 0.75)
-                        };
-                    },
-                    aspectRatio: 1.0 
-                };
+            btn.innerHTML = "MULAI SCAN";
+            btn.className = "bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-full shadow-lg text-sm font-bold border border-blue-400";
+            placeholder.style.display = 'flex';
+            isScanning = false;
+        }
 
-                html5QrcodeScanner.start({ facingMode: "environment" }, config, 
-                (decodedText) => {
-                    const id = decodedText.trim().toUpperCase();
-                    // Cegah duplikat scan untuk sesi ini
-                    if (scannedData.some(item => item.id === id)) return;
-                    
-                    let found = masterData.find(m => String(m['ID PALET']).trim().toUpperCase() === id);
-                    const itemData = { id: id, name: found ? found['NAMA PALET'] : 'Unknown', size: found ? found['SIZE'] : '-' };
-                    
-                    scannedData.push(itemData);
-                    document.getElementById('scan-beep').play().catch(()=>{});
-                    updateUI(itemData);
-                }, () => {});
-                isScanning = true;
+        // Fungsi toggle manual (jika tombol diklik)
+        window.toggleCamera = function() {
+            if (isScanning) {
+                stopScanner();
+            } else {
+                startScanner();
             }
         };
 
@@ -308,7 +349,6 @@
             document.getElementById('scan-count').innerText = scannedData.length;
             document.getElementById('last-scanned-info').textContent = `${lastItem.id} - ${lastItem.name}`;
             
-            // Animasi Flash
             const card = document.getElementById('scan-results-card');
             card.classList.remove('scan-success-anim');
             void card.offsetWidth; 
@@ -323,7 +363,7 @@
             }
         }
 
-        // --- SUBMIT DATA KHUSUS DRIVER (MODIFIKASI) ---
+        // --- SUBMIT DATA KHUSUS DRIVER ---
         window.submitData = async function() {
             const btn = document.getElementById('btn-simpan');
             const statusEl = document.getElementById('status-msg');
@@ -337,33 +377,24 @@
             statusEl.textContent = "Sedang memproses...";
 
             const now = new Date();
-            const timestamp = now.toLocaleString('id-ID'); // String waktu lokal
+            const timestamp = now.toLocaleString('id-ID'); 
             const tgl = now.toISOString().split('T')[0];
             const jam = now.toLocaleTimeString('id-ID');
             
-            // FORMAT ID PICKUP: username+Tanggal+Jam
-            // Menghapus spasi agar menjadi satu string ID yang solid
             const idPickup = `${currentUser.username}${tgl}${jam}`.replace(/[\s:-]/g, '');
 
             const transactionsToSend = [];
 
-            // MODIFIKASI 2: Tidak ada grouping (penggabungan ID).
-            // Setiap item yang discan menjadi 1 baris transaksi terpisah.
             scannedData.forEach(item => {
                 transactionsToSend.push({
-                    // FIELD YANG DIMINTA
                     'ID Pickup': idPickup,
                     'Status pickup': 'Open',
-                    
-                    // FIELD STANDAR
                     'Nama Palet': item.name,
                     'Size': item.size,
                     'Tanggal Transaksi': tgl,
                     'Jam Transaksi': jam,
-                    'ID Palet': item.id, // Satu ID per baris
-                    'Jumlah Palet': 1,   // Jumlah selalu 1 per baris
-                    
-                    // Lain-lain
+                    'ID Palet': item.id,
+                    'Jumlah Palet': 1, 
                     'Jenis Transaksi': 'Pickup palet', 
                     'username': currentUser.username,
                     'Submitted By': currentUser.username 
@@ -385,7 +416,6 @@
                     body: JSON.stringify(payload),
                 });
 
-                // Fake delay untuk UI
                 await new Promise(r => setTimeout(r, 1500));
 
                 statusEl.className = "text-center text-xs font-bold text-green-500 pb-4";
